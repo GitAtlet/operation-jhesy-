@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>miro · chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+        body {
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+        .chat-container {
+            width: 100%;
+            max-width: 480px;
+            height: 100vh;
+            background: #0b0b0b;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 0 20px rgba(255,255,255,0.05);
+            border-left: 1px solid #1e1e1e;
+            border-right: 1px solid #1e1e1e;
+        }
+        .chat-header {
+            padding: 16px 16px 8px;
+            border-bottom: 1px solid #1e1e1e;
+            background: #0b0b0b;
+            z-index: 10;
+        }
+        .chat-header .name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #f0f0f0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .chat-header .status {
+            font-size: 13px;
+            color: #8e8e8e;
+            margin-top: 4px;
+            min-height: 18px;
+            transition: opacity 0.2s;
+        }
+        .messages-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            scroll-behavior: smooth;
+        }
+        .date-header {
+            text-align: center;
+            margin: 16px 0 8px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #6b6b6b;
+            background: #1a1a1a;
+            padding: 4px 12px;
+            border-radius: 100px;
+            align-self: center;
+            width: fit-content;
+            max-width: 90%;
+            letter-spacing: 0.3px;
+        }
+        .message-row {
+            display: flex;
+            width: 100%;
+        }
+        .message-row.outgoing {
+            justify-content: flex-end;
+        }
+        .message-row.incoming {
+            justify-content: flex-start;
+        }
+        .bubble-wrapper {
+            max-width: 80%;
+            position: relative;
+            transition: transform 0.1s ease;
+            cursor: pointer;
+        }
+        .bubble-wrapper:active {
+            transform: scale(1.02);
+        }
+        .bubble {
+            padding: 10px 14px;
+            border-radius: 22px;
+            font-size: 15px;
+            line-height: 1.45;
+            word-wrap: break-word;
+            background: #262626;
+            color: #efefef;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+        .outgoing .bubble {
+            background: #3797f0;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        .incoming .bubble {
+            background: #1e1e1e;
+            color: #efefef;
+            border-bottom-left-radius: 4px;
+        }
+        .reactions {
+            display: flex;
+            gap: 4px;
+            margin-top: 6px;
+            flex-wrap: wrap;
+        }
+        .reaction-emoji {
+            background: #2c2c2c;
+            border-radius: 20px;
+            padding: 2px 8px;
+            font-size: 15px;
+            border: 1px solid #4a4a4a;
+            box-shadow: 0 1px 2px black;
+            line-height: 1.3;
+        }
+        .outgoing .reaction-emoji {
+            background: #1f6fb0;
+            border-color: #1f6fb0;
+        }
+        .media-placeholder {
+            background: #1e1e1e;
+            border-radius: 18px;
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #aaa;
+            border: 1px dashed #444;
+            margin-bottom: 4px;
+        }
+        .gif-img {
+            max-width: 100%;
+            border-radius: 16px;
+            display: block;
+        }
+        .link-preview {
+            color: #3797f0;
+            text-decoration: underline;
+            word-break: break-all;
+        }
+        .sticker-placeholder {
+            font-style: italic;
+            color: #888;
+            padding: 8px 0;
+        }
+        .timestamp-tooltip {
+            position: fixed;
+            background: #2c2c2c;
+            color: #ddd;
+            padding: 6px 12px;
+            border-radius: 30px;
+            font-size: 13px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+            pointer-events: none;
+            z-index: 1000;
+            transition: opacity 0.15s;
+            border: 1px solid #4a4a4a;
+            max-width: 200px;
+            text-align: center;
+            white-space: nowrap;
+        }
+        .hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+        .error-message {
+            background: #2a0f0f;
+            color: #ff8a8a;
+            padding: 24px 20px;
+            border-radius: 20px;
+            margin: 20px;
+            text-align: center;
+            border: 1px solid #6b2a2a;
+        }
+        .error-message a {
+            color: #9bc9ff;
+            text-decoration: underline;
+        }
+        .error-message code {
+            background: #1a1a1a;
+            padding: 4px 8px;
+            border-radius: 8px;
+            display: inline-block;
+            margin: 4px 0;
+            font-family: monospace;
+        }
+        .loading {
+            text-align: center;
+            color: #666;
+            padding: 40px;
+        }
+    </style>
+</head>
+<body>
+<div class="chat-container">
+    <div class="chat-header">
+        <div class="name">
+            <span>miro</span>
+            <span style="font-size: 12px; color:#0f0;">●</span>
+        </div>
+        <div class="status" id="status-text">...</div>
+    </div>
+    <div class="messages-area" id="messages-area">
+        <div class="loading" id="loading-indicator">loading messages...</div>
+    </div>
+</div>
+
+<!-- timestamp popup -->
+<div id="timestamp-popup" class="timestamp-tooltip hidden"></div>
+
+<script>
+    (function() {
+        // ---------- dynamic status sentences ----------
+        const statusLines = [
+            "thinking about you",
+            "smiling at the screen",
+            "listening to music",
+            "reading your messages",
+            "eating something good",
+            "staring at the ceiling",
+            "sending good vibes",
+            "typing... maybe",
+            "laughing at a meme",
+            "remembering something",
+            "feeling grateful",
+            "drinking coffee",
+            "taking a deep breath",
+            "watching the clouds",
+            "humming a tune",
+            "thinking of a reply",
+            "smiling quietly",
+            "being silly",
+            "enjoying this chat",
+            "quietly content"
+        ];
+        let statusIndex = 0;
+        const statusEl = document.getElementById('status-text');
+        function rotateStatus() {
+            statusEl.style.opacity = '0.6';
+            statusEl.textContent = statusLines[statusIndex];
+            statusIndex = (statusIndex + 1) % statusLines.length;
+            setTimeout(() => statusEl.style.opacity = '1', 50);
+        }
+        rotateStatus();
+        setInterval(rotateStatus, 4000);
+
+        const messagesArea = document.getElementById('messages-area');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const popup = document.getElementById('timestamp-popup');
+
+        // helper: format time from timestamp_ms
+        function formatTime(timestamp) {
+            const d = new Date(timestamp);
+            let hours = d.getHours();
+            const minutes = d.getMinutes().toString().padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12 || 12;
+            return `${hours}:${minutes} ${ampm}`;
+        }
+
+        function formatDateHeader(timestamp) {
+            const d = new Date(timestamp);
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            if (d.toDateString() === today.toDateString()) return 'Today';
+            if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+
+        function renderMessage(message, isOutgoing) {
+            const row = document.createElement('div');
+            row.className = `message-row ${isOutgoing ? 'outgoing' : 'incoming'}`;
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'bubble-wrapper';
+            wrapper.setAttribute('data-timestamp', message.timestamp_ms);
+            wrapper.setAttribute('data-time', formatTime(message.timestamp_ms));
+
+            const bubble = document.createElement('div');
+            bubble.className = 'bubble';
+
+            // text content
+            if (message.content && message.content.trim() !== '') {
+                const textSpan = document.createElement('span');
+                textSpan.textContent = message.content;
+                bubble.appendChild(textSpan);
+            }
+
+            // photos
+            if (message.photos && message.photos.length > 0) {
+                const photoDiv = document.createElement('div');
+                photoDiv.className = 'media-placeholder';
+                photoDiv.innerHTML = '📷 <span style="color:#aaa;">photo</span>';
+                bubble.appendChild(photoDiv);
+            }
+
+            // videos
+            if (message.videos && message.videos.length > 0) {
+                const videoDiv = document.createElement('div');
+                videoDiv.className = 'media-placeholder';
+                videoDiv.innerHTML = '🎥 <span style="color:#aaa;">video</span>';
+                bubble.appendChild(videoDiv);
+            }
+
+            // share (link / gif)
+            if (message.share) {
+                const link = message.share.link;
+                if (link && (link.includes('giphy.com') || link.includes('.gif'))) {
+                    const img = document.createElement('img');
+                    img.src = link;
+                    img.alt = 'gif';
+                    img.className = 'gif-img';
+                    img.onerror = () => img.style.display = 'none';
+                    bubble.appendChild(img);
+                } else if (link) {
+                    const a = document.createElement('a');
+                    a.href = link;
+                    a.target = '_blank';
+                    a.className = 'link-preview';
+                    a.textContent = link.length > 40 ? link.slice(0,40)+'…' : link;
+                    bubble.appendChild(a);
+                } else if (message.share.share_text) {
+                    const shareText = document.createElement('span');
+                    shareText.textContent = message.share.share_text;
+                    bubble.appendChild(shareText);
+                }
+            }
+
+            // stickers
+            if (message.content && message.content.includes('sticker')) {
+                const stickerDiv = document.createElement('div');
+                stickerDiv.className = 'sticker-placeholder';
+                stickerDiv.textContent = '🎨 sticker';
+                bubble.appendChild(stickerDiv);
+            }
+
+            // reactions
+            if (message.reactions && message.reactions.length > 0) {
+                const reactionsDiv = document.createElement('div');
+                reactionsDiv.className = 'reactions';
+                message.reactions.forEach(r => {
+                    const reactSpan = document.createElement('span');
+                    reactSpan.className = 'reaction-emoji';
+                    reactSpan.textContent = r.reaction;
+                    reactionsDiv.appendChild(reactSpan);
+                });
+                bubble.appendChild(reactionsDiv);
+            }
+
+            wrapper.appendChild(bubble);
+            row.appendChild(wrapper);
+
+            // click to show timestamp
+            wrapper.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const time = this.getAttribute('data-time');
+                popup.textContent = time;
+                popup.classList.remove('hidden');
+
+                const rect = this.getBoundingClientRect();
+                const popupWidth = popup.offsetWidth;
+                let left = rect.left + (rect.width / 2) - (popupWidth / 2);
+                if (left < 5) left = 5;
+                if (left + popupWidth > window.innerWidth - 5) left = window.innerWidth - popupWidth - 5;
+                const top = rect.top - 40;
+                popup.style.left = left + 'px';
+                popup.style.top = (top > 10 ? top : rect.bottom + 10) + 'px';
+
+                setTimeout(() => popup.classList.add('hidden'), 2000);
+            });
+
+            return row;
+        }
+
+        function renderMessages(messages) {
+            messagesArea.innerHTML = '';
+            if (!messages.length) return;
+
+            const sorted = [...messages].sort((a,b) => a.timestamp_ms - b.timestamp_ms);
+            let lastDate = null;
+            for (const msg of sorted) {
+                const msgDate = new Date(msg.timestamp_ms).toDateString();
+                if (msgDate !== lastDate) {
+                    lastDate = msgDate;
+                    const header = document.createElement('div');
+                    header.className = 'date-header';
+                    header.textContent = formatDateHeader(msg.timestamp_ms);
+                    messagesArea.appendChild(header);
+                }
+                const isOutgoing = msg.sender_name === 'J'; // J = esy
+                messagesArea.appendChild(renderMessage(msg, isOutgoing));
+            }
+            messagesArea.scrollTop = messagesArea.scrollHeight;
+        }
+
+        function showError(message) {
+            messagesArea.innerHTML = `
+                <div class="error-message">
+                    <div style="font-size:40px; margin-bottom:12px;">⚠️</div>
+                    <div style="font-weight:600; margin-bottom:8px;">Failed to load messages</div>
+                    <div style="margin-bottom:12px;">${message}</div>
+                    <hr style="border-color:#444; margin:16px 0;">
+                    <div style="font-size:14px; text-align:left;">
+                        <p><strong>How to fix:</strong></p>
+                        <p>1. Open a terminal in the folder containing <code style="background:#1a1a1a;">message_1.json</code> and this HTML file.</p>
+                        <p>2. Start a simple local server. For example, if you have Python installed, run:</p>
+                        <code style="background:#111; display:block; padding:8px; border-radius:6px; margin:8px 0;">python3 -m http.server 8000</code>
+                        <p>3. Then open <a href="http://localhost:8000/" target="_blank">http://localhost:8000/</a> in your browser.</p>
+                        <p style="margin-top:12px;">This chat uses fetch() which requires a server due to browser security policies.</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Attempt to fetch JSON
+        fetch('message_1.json')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status} - file not found or inaccessible`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                loadingIndicator.style.display = 'none';
+                renderMessages(data.messages || []);
+            })
+            .catch(err => {
+                loadingIndicator.style.display = 'none';
+                console.error('Fetch error:', err);
+                showError(err.message);
+            });
+
+        // hide popup on scroll
+        messagesArea.addEventListener('scroll', () => popup.classList.add('hidden'));
+        window.addEventListener('click', () => popup.classList.add('hidden'));
+    })();
+</script>
+</body>
+</html>
