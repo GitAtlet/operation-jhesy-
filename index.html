@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <title>miro · private chat</title>
+    <!-- Leaflet for map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         * {
             margin: 0;
@@ -32,12 +35,37 @@
             border-right: 1px solid #1e1e1e;
         }
         .chat-header {
-            padding: 16px 16px 8px;
+            padding: 12px 16px;
             border-bottom: 1px solid #1e1e1e;
             background: #0b0b0b;
             z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
-        .chat-header .name {
+        .header-avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: #2a2a2a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 500;
+            color: white;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        .header-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .header-info {
+            flex: 1;
+        }
+        .header-info .name {
             font-size: 18px;
             font-weight: 600;
             color: #f0f0f0;
@@ -45,12 +73,28 @@
             align-items: center;
             gap: 6px;
         }
-        .chat-header .status {
+        .header-info .status {
             font-size: 13px;
             color: #8e8e8e;
-            margin-top: 4px;
+            margin-top: 2px;
             min-height: 18px;
             transition: opacity 0.2s;
+        }
+        /* globe button */
+        .globe-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: background 0.2s;
+            color: #aaa;
+            line-height: 1;
+        }
+        .globe-btn:hover {
+            background: #2a2a2a;
+            color: #3797f0;
         }
         .messages-area {
             flex: 1;
@@ -78,12 +122,36 @@
         .message-row {
             display: flex;
             width: 100%;
+            gap: 8px;
         }
         .message-row.outgoing {
             justify-content: flex-end;
         }
         .message-row.incoming {
             justify-content: flex-start;
+        }
+        .avatar-col {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #2a2a2a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: 500;
+            color: white;
+            overflow: hidden;
+            flex-shrink: 0;
+            margin-top: 4px;
+        }
+        .avatar-col img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .message-row.outgoing .avatar-col {
+            display: none;
         }
         .bubble-wrapper {
             max-width: 80%;
@@ -189,24 +257,12 @@
             text-align: center;
             border: 1px solid #6b2a2a;
         }
-        .error-message a {
-            color: #9bc9ff;
-            text-decoration: underline;
-        }
-        .error-message code {
-            background: #1a1a1a;
-            padding: 4px 8px;
-            border-radius: 8px;
-            display: inline-block;
-            margin: 4px 0;
-            font-family: monospace;
-        }
         .loading {
             text-align: center;
             color: #666;
             padding: 40px;
         }
-        /* ---------- password overlay ---------- */
+        /* password overlay */
         .overlay {
             position: fixed;
             top: 0;
@@ -278,6 +334,89 @@
         .chat-container {
             display: none; /* hidden until password is entered */
         }
+        /* map modal */
+        .map-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
+            z-index: 3000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .map-modal.visible {
+            visibility: visible;
+            opacity: 1;
+        }
+        .map-container {
+            width: 95%;
+            max-width: 1200px;
+            height: 80%;
+            background: #1a1a1a;
+            border-radius: 24px;
+            overflow: hidden;
+            border: 2px solid #333;
+            position: relative;
+        }
+        #world-map {
+            width: 100%;
+            height: 100%;
+            background: #2a2a2a;
+        }
+        .map-header {
+            width: 95%;
+            max-width: 1200px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            color: white;
+        }
+        .map-header h3 {
+            font-size: 20px;
+            font-weight: 500;
+            color: #ddd;
+        }
+        .close-map-btn {
+            background: #3797f0;
+            border: none;
+            color: white;
+            font-size: 16px;
+            padding: 8px 20px;
+            border-radius: 40px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .close-map-btn:hover {
+            background: #2a7ed4;
+        }
+        .selected-countries-info {
+            color: #aaa;
+            margin-top: 8px;
+            font-size: 14px;
+            max-width: 95%;
+            text-align: center;
+        }
+        /* leaflet overrides */
+        .leaflet-control-attribution {
+            background: rgba(0,0,0,0.5) !important;
+            color: #aaa !important;
+        }
+        .leaflet-popup-content-wrapper {
+            background: #2a2a2a;
+            color: white;
+            border-radius: 12px;
+        }
+        .leaflet-popup-tip {
+            background: #2a2a2a;
+        }
     </style>
 </head>
 <body>
@@ -292,14 +431,30 @@
         </div>
     </div>
 
-    <!-- Chat container (initially hidden) -->
+    <!-- Map modal (initially hidden) -->
+    <div class="map-modal" id="map-modal">
+        <div class="map-header">
+            <h3>🌍 your travel wishlist</h3>
+            <button class="close-map-btn" id="close-map-btn">done</button>
+        </div>
+        <div class="map-container">
+            <div id="world-map"></div>
+        </div>
+        <div class="selected-countries-info" id="selected-countries-info"></div>
+    </div>
+
+    <!-- Chat container -->
     <div class="chat-container" id="chat-container">
         <div class="chat-header">
-            <div class="name">
-                <span>miro</span>
-                <span style="font-size: 12px; color:#0f0;">●</span>
+            <div class="header-avatar" id="header-avatar"></div>
+            <div class="header-info">
+                <div class="name">
+                    <span>miro</span>
+                    <span style="font-size: 12px; color:#0f0;">●</span>
+                </div>
+                <div class="status" id="status-text">...</div>
             </div>
-            <div class="status" id="status-text">...</div>
+            <button class="globe-btn" id="open-map-btn" title="travel wishlist">🌍</button>
         </div>
         <div class="messages-area" id="messages-area">
             <div class="loading" id="loading-indicator">loading messages...</div>
@@ -321,8 +476,7 @@
                 const pwd = passwordInput.value.trim();
                 if (pwd === 'esy' || pwd === 'miro') {
                     overlay.style.display = 'none';
-                    chatContainer.style.display = 'flex'; // show chat
-                    // start loading messages
+                    chatContainer.style.display = 'flex';
                     initChat();
                 } else {
                     errorMsg.textContent = 'wrong password';
@@ -330,14 +484,142 @@
                     passwordInput.focus();
                 }
             }
-
             unlockBtn.addEventListener('click', checkPassword);
             passwordInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') checkPassword();
             });
 
-            // ---------- chat logic (same as before) ----------
+            // ---------- avatar helper ----------
+            function createAvatar(container, name, imageFile) {
+                const img = new Image();
+                img.onload = () => {
+                    container.innerHTML = '';
+                    container.appendChild(img);
+                };
+                img.onerror = () => {
+                    container.innerHTML = '';
+                    container.style.background = name === 'miro' ? '#3b5c7a' : '#7a4b6e';
+                    container.style.display = 'flex';
+                    container.style.alignItems = 'center';
+                    container.style.justifyContent = 'center';
+                    container.textContent = name.charAt(0).toUpperCase();
+                };
+                img.src = imageFile;
+                img.alt = name;
+                img.style.width = '100%';
+                img.style.height = '100%';
+                img.style.objectFit = 'cover';
+            }
+
+            // ---------- map wishlist ----------
+            let map = null;
+            let geoJsonLayer = null;
+            let selectedCountries = new Set(); // store country codes (or names)
+            const STORAGE_KEY = 'travelWishlist';
+
+            // load saved selections
+            function loadSelections() {
+                try {
+                    const saved = localStorage.getItem(STORAGE_KEY);
+                    if (saved) {
+                        selectedCountries = new Set(JSON.parse(saved));
+                    }
+                } catch (e) {}
+            }
+            function saveSelections() {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify([...selectedCountries]));
+                updateSelectedInfo();
+            }
+            function updateSelectedInfo() {
+                const info = document.getElementById('selected-countries-info');
+                if (selectedCountries.size === 0) {
+                    info.textContent = 'click on countries to add them to your wishlist ✨';
+                } else {
+                    info.textContent = `✅ ${selectedCountries.size} country${selectedCountries.size > 1 ? 's' : ''} selected`;
+                }
+            }
+
+            // initialize map
+            function initMap() {
+                if (map) return; // already initialized
+
+                map = L.map('world-map').setView([20, 0], 2);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(map);
+
+                // load countries GeoJSON
+                fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson')
+                    .then(res => res.json())
+                    .then(data => {
+                        geoJsonLayer = L.geoJSON(data, {
+                            style: feature => {
+                                // default style
+                                return {
+                                    fillColor: '#2a5c8a',
+                                    color: '#555',
+                                    weight: 1,
+                                    fillOpacity: 0.5
+                                };
+                            },
+                            onEachFeature: (feature, layer) => {
+                                const countryName = feature.properties.ADMIN || feature.properties.name;
+                                const countryCode = feature.properties.ISO_A3 || feature.properties.adm0_a3; // try common codes
+                                if (!countryCode) return;
+
+                                // check if already selected
+                                if (selectedCountries.has(countryCode)) {
+                                    layer.setStyle({ fillColor: '#f0a55a', fillOpacity: 0.8 });
+                                }
+
+                                layer.on('click', () => {
+                                    if (selectedCountries.has(countryCode)) {
+                                        selectedCountries.delete(countryCode);
+                                        layer.setStyle({ fillColor: '#2a5c8a', fillOpacity: 0.5 });
+                                    } else {
+                                        selectedCountries.add(countryCode);
+                                        layer.setStyle({ fillColor: '#f0a55a', fillOpacity: 0.8 });
+                                    }
+                                    saveSelections();
+                                });
+
+                                layer.bindTooltip(countryName, { permanent: false, direction: 'auto' });
+                            }
+                        }).addTo(map);
+                    })
+                    .catch(err => console.error('failed to load countries', err));
+            }
+
+            // open modal
+            function openMapModal() {
+                const modal = document.getElementById('map-modal');
+                modal.classList.add('visible');
+                loadSelections(); // reload from storage (in case changed elsewhere)
+                initMap(); // ensures map exists
+                updateSelectedInfo();
+                // small delay to let map render correctly
+                setTimeout(() => map.invalidateSize(), 100);
+            }
+
+            // close modal
+            function closeMapModal() {
+                document.getElementById('map-modal').classList.remove('visible');
+            }
+
+            document.getElementById('open-map-btn').addEventListener('click', openMapModal);
+            document.getElementById('close-map-btn').addEventListener('click', closeMapModal);
+            // close on backdrop click (optional)
+            document.getElementById('map-modal').addEventListener('click', (e) => {
+                if (e.target === document.getElementById('map-modal')) closeMapModal();
+            });
+
+            // ---------- chat logic ----------
             function initChat() {
+                // set header avatar (miro)
+                const headerAvatar = document.getElementById('header-avatar');
+                createAvatar(headerAvatar, 'miro', 'miro.jpg');
+
+                // dynamic status
                 const statusLines = [
                     "thinking about you", "smiling at the screen", "listening to music",
                     "reading your messages", "eating something good", "staring at the ceiling",
@@ -362,7 +644,7 @@
                 const loadingIndicator = document.getElementById('loading-indicator');
                 const popup = document.getElementById('timestamp-popup');
 
-                // ---------- Mojibake fix ----------
+                // mojibake fix
                 function fixMojibake(str) {
                     if (typeof str !== 'string') return str;
                     const bytes = new Uint8Array(str.length);
@@ -382,7 +664,7 @@
                     return obj;
                 }
 
-                // ---------- detect system messages ----------
+                // system message filter
                 function isSystemMessage(msg) {
                     if (msg.call_duration !== undefined) return true;
                     if (msg.content) {
@@ -399,7 +681,7 @@
                     return false;
                 }
 
-                // ---------- time helpers ----------
+                // time helpers
                 function formatTime(timestamp) {
                     const d = new Date(timestamp);
                     let hours = d.getHours();
@@ -418,10 +700,35 @@
                     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                 }
 
-                // ---------- render one message ----------
+                // render one message with avatar
                 function renderMessage(message, isOutgoing) {
                     const row = document.createElement('div');
                     row.className = `message-row ${isOutgoing ? 'outgoing' : 'incoming'}`;
+
+                    if (!isOutgoing) {
+                        const avatarCol = document.createElement('div');
+                        avatarCol.className = 'avatar-col';
+                        const img = new Image();
+                        img.onload = () => {
+                            avatarCol.innerHTML = '';
+                            avatarCol.appendChild(img);
+                        };
+                        img.onerror = () => {
+                            avatarCol.innerHTML = '';
+                            avatarCol.style.background = '#3b5c7a';
+                            avatarCol.style.display = 'flex';
+                            avatarCol.style.alignItems = 'center';
+                            avatarCol.style.justifyContent = 'center';
+                            avatarCol.textContent = 'M';
+                        };
+                        img.src = 'miro.jpg';
+                        img.alt = 'miro';
+                        img.style.width = '100%';
+                        img.style.height = '100%';
+                        img.style.objectFit = 'cover';
+                        avatarCol.appendChild(img);
+                        row.appendChild(avatarCol);
+                    }
 
                     const wrapper = document.createElement('div');
                     wrapper.className = 'bubble-wrapper';
@@ -546,13 +853,7 @@
                             <div style="font-weight:600; margin-bottom:8px;">Failed to load messages</div>
                             <div style="margin-bottom:12px;">${message}</div>
                             <hr style="border-color:#444; margin:16px 0;">
-                            <div style="font-size:14px; text-align:left;">
-                                <p><strong>How to fix:</strong></p>
-                                <p>Make sure <code style="background:#1a1a1a;">message_1.json</code> is in the same folder as this HTML file.</p>
-                                <p>If you're opening directly (file://), use a local server:</p>
-                                <code style="background:#111; display:block; padding:8px; border-radius:6px; margin:8px 0;">python3 -m http.server 8000</code>
-                                <p>Then open <a href="http://localhost:8000/" target="_blank">http://localhost:8000/</a></p>
-                            </div>
+                            <p>Make sure <code>message_1.json</code> is in the same folder.</p>
                         </div>
                     `;
                 }
@@ -576,6 +877,9 @@
                 messagesArea.addEventListener('scroll', () => popup.classList.add('hidden'));
                 window.addEventListener('click', () => popup.classList.add('hidden'));
             }
+
+            // load wishlist selections on start
+            loadSelections();
         })();
     </script>
 </body>
