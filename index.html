@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>miro · chat</title>
+    <title>miro · private chat</title>
     <style>
-        /* (styles unchanged – same as before) */
         * {
             margin: 0;
             padding: 0;
@@ -207,284 +206,377 @@
             color: #666;
             padding: 40px;
         }
+        /* ---------- password overlay ---------- */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            backdrop-filter: blur(5px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        .password-box {
+            background: #1a1a1a;
+            padding: 32px 24px;
+            border-radius: 32px;
+            width: 320px;
+            max-width: 90%;
+            text-align: center;
+            border: 1px solid #333;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+        .password-box h2 {
+            color: #fff;
+            margin-bottom: 20px;
+            font-weight: 500;
+            font-size: 22px;
+        }
+        .password-box input {
+            width: 100%;
+            padding: 14px 18px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 40px;
+            color: white;
+            font-size: 16px;
+            outline: none;
+            margin-bottom: 16px;
+        }
+        .password-box input:focus {
+            border-color: #3797f0;
+        }
+        .password-box button {
+            background: #3797f0;
+            color: white;
+            border: none;
+            padding: 14px 20px;
+            border-radius: 40px;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .password-box button:hover {
+            background: #2a7ed4;
+        }
+        .error-msg {
+            color: #ff6b6b;
+            margin-top: 12px;
+            font-size: 14px;
+        }
+        .hint {
+            color: #aaa;
+            margin-top: 12px;
+            font-size: 13px;
+        }
+        .chat-container {
+            display: none; /* hidden until password is entered */
+        }
     </style>
 </head>
 <body>
-<div class="chat-container">
-    <div class="chat-header">
-        <div class="name">
-            <span>miro</span>
-            <span style="font-size: 12px; color:#0f0;">●</span>
+    <!-- Password overlay -->
+    <div class="overlay" id="password-overlay">
+        <div class="password-box">
+            <h2>🔐 private chat</h2>
+            <input type="password" id="password-input" placeholder="enter password" autofocus>
+            <button id="unlock-btn">unlock</button>
+            <div class="error-msg" id="password-error"></div>
+            <div class="hint">(hint: esy / miro)</div>
         </div>
-        <div class="status" id="status-text">...</div>
     </div>
-    <div class="messages-area" id="messages-area">
-        <div class="loading" id="loading-indicator">loading messages...</div>
+
+    <!-- Chat container (initially hidden) -->
+    <div class="chat-container" id="chat-container">
+        <div class="chat-header">
+            <div class="name">
+                <span>miro</span>
+                <span style="font-size: 12px; color:#0f0;">●</span>
+            </div>
+            <div class="status" id="status-text">...</div>
+        </div>
+        <div class="messages-area" id="messages-area">
+            <div class="loading" id="loading-indicator">loading messages...</div>
+        </div>
     </div>
-</div>
 
-<div id="timestamp-popup" class="timestamp-tooltip hidden"></div>
+    <div id="timestamp-popup" class="timestamp-tooltip hidden"></div>
 
-<script>
-    (function() {
-        // ---------- dynamic status ----------
-        const statusLines = [
-            "thinking about you", "smiling at the screen", "listening to music",
-            "reading your messages", "eating something good", "staring at the ceiling",
-            "sending good vibes", "typing... maybe", "laughing at a meme",
-            "remembering something", "feeling grateful", "drinking coffee",
-            "taking a deep breath", "watching the clouds", "humming a tune",
-            "thinking of a reply", "smiling quietly", "being silly",
-            "enjoying this chat", "quietly content"
-        ];
-        let statusIndex = 0;
-        const statusEl = document.getElementById('status-text');
-        function rotateStatus() {
-            statusEl.style.opacity = '0.6';
-            statusEl.textContent = statusLines[statusIndex];
-            statusIndex = (statusIndex + 1) % statusLines.length;
-            setTimeout(() => statusEl.style.opacity = '1', 50);
-        }
-        rotateStatus();
-        setInterval(rotateStatus, 4000);
+    <script>
+        (function() {
+            // ---------- password check ----------
+            const overlay = document.getElementById('password-overlay');
+            const chatContainer = document.getElementById('chat-container');
+            const passwordInput = document.getElementById('password-input');
+            const unlockBtn = document.getElementById('unlock-btn');
+            const errorMsg = document.getElementById('password-error');
 
-        const messagesArea = document.getElementById('messages-area');
-        const loadingIndicator = document.getElementById('loading-indicator');
-        const popup = document.getElementById('timestamp-popup');
-
-        // ---------- Mojibake fix ----------
-        function fixMojibake(str) {
-            if (typeof str !== 'string') return str;
-            const bytes = new Uint8Array(str.length);
-            for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xFF;
-            return new TextDecoder('utf-8').decode(bytes);
-        }
-        function deepFixMojibake(obj) {
-            if (Array.isArray(obj)) {
-                for (let i = 0; i < obj.length; i++) obj[i] = deepFixMojibake(obj[i]);
-            } else if (obj && typeof obj === 'object') {
-                for (let key in obj) {
-                    if (Object.prototype.hasOwnProperty.call(obj, key)) obj[key] = deepFixMojibake(obj[key]);
-                }
-            } else if (typeof obj === 'string') {
-                return fixMojibake(obj);
-            }
-            return obj;
-        }
-
-        // ---------- Helper to detect system/action messages ----------
-        function isSystemMessage(msg) {
-            // call logs
-            if (msg.call_duration !== undefined) return true;
-
-            // video/audio chat start/end
-            if (msg.content) {
-                const c = msg.content;
-                if (c.startsWith('Reacted ') ||
-                    c.startsWith('You sent a sticker.') ||
-                    c.startsWith('You started a video chat') ||
-                    c.startsWith('Video chat ended') ||
-                    c.includes('changed the chat theme') ||
-                    c.includes('started a video chat')) {
-                    return true;
-                }
-                // Some messages are just empty objects with no content but maybe other fields?
-                // We'll keep them if they have photos/videos/share.
-            }
-            return false;
-        }
-
-        // ---------- time helpers ----------
-        function formatTime(timestamp) {
-            const d = new Date(timestamp);
-            let hours = d.getHours();
-            const minutes = d.getMinutes().toString().padStart(2, '0');
-            const ampm = hours >= 12 ? 'PM' : 'AM';
-            hours = hours % 12 || 12;
-            return `${hours}:${minutes} ${ampm}`;
-        }
-        function formatDateHeader(timestamp) {
-            const d = new Date(timestamp);
-            const today = new Date();
-            const yesterday = new Date(today);
-            yesterday.setDate(yesterday.getDate() - 1);
-            if (d.toDateString() === today.toDateString()) return 'Today';
-            if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        }
-
-        // ---------- render one message ----------
-        function renderMessage(message, isOutgoing) {
-            const row = document.createElement('div');
-            row.className = `message-row ${isOutgoing ? 'outgoing' : 'incoming'}`;
-
-            const wrapper = document.createElement('div');
-            wrapper.className = 'bubble-wrapper';
-            wrapper.setAttribute('data-timestamp', message.timestamp_ms);
-            wrapper.setAttribute('data-time', formatTime(message.timestamp_ms));
-
-            const bubble = document.createElement('div');
-            bubble.className = 'bubble';
-
-            // text content (if any)
-            if (message.content && message.content.trim() !== '') {
-                const textSpan = document.createElement('span');
-                textSpan.textContent = message.content;
-                bubble.appendChild(textSpan);
-            }
-
-            // photos
-            if (message.photos && message.photos.length > 0) {
-                const photoDiv = document.createElement('div');
-                photoDiv.className = 'media-placeholder';
-                photoDiv.innerHTML = '📷 <span style="color:#aaa;">photo</span>';
-                bubble.appendChild(photoDiv);
-            }
-
-            // videos
-            if (message.videos && message.videos.length > 0) {
-                const videoDiv = document.createElement('div');
-                videoDiv.className = 'media-placeholder';
-                videoDiv.innerHTML = '🎥 <span style="color:#aaa;">video</span>';
-                bubble.appendChild(videoDiv);
-            }
-
-            // share (links / GIFs)
-            if (message.share) {
-                const link = message.share.link;
-                if (link && (link.includes('giphy.com') || link.includes('.gif'))) {
-                    const img = document.createElement('img');
-                    img.src = link;
-                    img.alt = 'gif';
-                    img.className = 'gif-img';
-                    img.onerror = () => img.style.display = 'none';
-                    bubble.appendChild(img);
-                } else if (link) {
-                    const a = document.createElement('a');
-                    a.href = link;
-                    a.target = '_blank';
-                    a.className = 'link-preview';
-                    a.textContent = link.length > 40 ? link.slice(0,40)+'…' : link;
-                    bubble.appendChild(a);
-                } else if (message.share.share_text) {
-                    const shareText = document.createElement('span');
-                    shareText.textContent = message.share.share_text;
-                    bubble.appendChild(shareText);
+            function checkPassword() {
+                const pwd = passwordInput.value.trim();
+                if (pwd === 'esy' || pwd === 'miro') {
+                    overlay.style.display = 'none';
+                    chatContainer.style.display = 'flex'; // show chat
+                    // start loading messages
+                    initChat();
+                } else {
+                    errorMsg.textContent = 'wrong password';
+                    passwordInput.value = '';
+                    passwordInput.focus();
                 }
             }
 
-            // stickers (if content mentions sticker, but we already filtered system ones)
-            if (message.content && message.content.includes('sticker') && !isSystemMessage(message)) {
-                const stickerDiv = document.createElement('div');
-                stickerDiv.className = 'sticker-placeholder';
-                stickerDiv.textContent = '🎨 sticker';
-                bubble.appendChild(stickerDiv);
-            }
-
-            // reactions (actual emoji reactions on this message)
-            if (message.reactions && message.reactions.length > 0) {
-                const reactionsDiv = document.createElement('div');
-                reactionsDiv.className = 'reactions';
-                message.reactions.forEach(r => {
-                    const reactSpan = document.createElement('span');
-                    reactSpan.className = 'reaction-emoji';
-                    reactSpan.textContent = r.reaction;
-                    reactionsDiv.appendChild(reactSpan);
-                });
-                bubble.appendChild(reactionsDiv);
-            }
-
-            wrapper.appendChild(bubble);
-            row.appendChild(wrapper);
-
-            // click to show timestamp
-            wrapper.addEventListener('click', function(e) {
-                e.stopPropagation();
-                const time = this.getAttribute('data-time');
-                popup.textContent = time;
-                popup.classList.remove('hidden');
-
-                const rect = this.getBoundingClientRect();
-                const popupWidth = popup.offsetWidth;
-                let left = rect.left + (rect.width / 2) - (popupWidth / 2);
-                if (left < 5) left = 5;
-                if (left + popupWidth > window.innerWidth - 5) left = window.innerWidth - popupWidth - 5;
-                const top = rect.top - 40;
-                popup.style.left = left + 'px';
-                popup.style.top = (top > 10 ? top : rect.bottom + 10) + 'px';
-
-                setTimeout(() => popup.classList.add('hidden'), 2000);
+            unlockBtn.addEventListener('click', checkPassword);
+            passwordInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') checkPassword();
             });
 
-            return row;
-        }
-
-        // ---------- render all messages (filtered) ----------
-        function renderMessages(messages) {
-            messagesArea.innerHTML = '';
-            if (!messages.length) return;
-
-            // Filter out system messages
-            const filtered = messages.filter(msg => !isSystemMessage(msg));
-
-            // Sort oldest first
-            const sorted = [...filtered].sort((a,b) => a.timestamp_ms - b.timestamp_ms);
-            let lastDate = null;
-            for (const msg of sorted) {
-                const msgDate = new Date(msg.timestamp_ms).toDateString();
-                if (msgDate !== lastDate) {
-                    lastDate = msgDate;
-                    const header = document.createElement('div');
-                    header.className = 'date-header';
-                    header.textContent = formatDateHeader(msg.timestamp_ms);
-                    messagesArea.appendChild(header);
+            // ---------- chat logic (same as before) ----------
+            function initChat() {
+                const statusLines = [
+                    "thinking about you", "smiling at the screen", "listening to music",
+                    "reading your messages", "eating something good", "staring at the ceiling",
+                    "sending good vibes", "typing... maybe", "laughing at a meme",
+                    "remembering something", "feeling grateful", "drinking coffee",
+                    "taking a deep breath", "watching the clouds", "humming a tune",
+                    "thinking of a reply", "smiling quietly", "being silly",
+                    "enjoying this chat", "quietly content"
+                ];
+                let statusIndex = 0;
+                const statusEl = document.getElementById('status-text');
+                function rotateStatus() {
+                    statusEl.style.opacity = '0.6';
+                    statusEl.textContent = statusLines[statusIndex];
+                    statusIndex = (statusIndex + 1) % statusLines.length;
+                    setTimeout(() => statusEl.style.opacity = '1', 50);
                 }
-                const isOutgoing = msg.sender_name === 'J'; // J = esy
-                messagesArea.appendChild(renderMessage(msg, isOutgoing));
+                rotateStatus();
+                setInterval(rotateStatus, 4000);
+
+                const messagesArea = document.getElementById('messages-area');
+                const loadingIndicator = document.getElementById('loading-indicator');
+                const popup = document.getElementById('timestamp-popup');
+
+                // ---------- Mojibake fix ----------
+                function fixMojibake(str) {
+                    if (typeof str !== 'string') return str;
+                    const bytes = new Uint8Array(str.length);
+                    for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xFF;
+                    return new TextDecoder('utf-8').decode(bytes);
+                }
+                function deepFixMojibake(obj) {
+                    if (Array.isArray(obj)) {
+                        for (let i = 0; i < obj.length; i++) obj[i] = deepFixMojibake(obj[i]);
+                    } else if (obj && typeof obj === 'object') {
+                        for (let key in obj) {
+                            if (Object.prototype.hasOwnProperty.call(obj, key)) obj[key] = deepFixMojibake(obj[key]);
+                        }
+                    } else if (typeof obj === 'string') {
+                        return fixMojibake(obj);
+                    }
+                    return obj;
+                }
+
+                // ---------- detect system messages ----------
+                function isSystemMessage(msg) {
+                    if (msg.call_duration !== undefined) return true;
+                    if (msg.content) {
+                        const c = msg.content;
+                        if (c.startsWith('Reacted ') ||
+                            c.startsWith('You sent a sticker.') ||
+                            c.startsWith('You started a video chat') ||
+                            c.startsWith('Video chat ended') ||
+                            c.includes('changed the chat theme') ||
+                            c.includes('started a video chat')) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                // ---------- time helpers ----------
+                function formatTime(timestamp) {
+                    const d = new Date(timestamp);
+                    let hours = d.getHours();
+                    const minutes = d.getMinutes().toString().padStart(2, '0');
+                    const ampm = hours >= 12 ? 'PM' : 'AM';
+                    hours = hours % 12 || 12;
+                    return `${hours}:${minutes} ${ampm}`;
+                }
+                function formatDateHeader(timestamp) {
+                    const d = new Date(timestamp);
+                    const today = new Date();
+                    const yesterday = new Date(today);
+                    yesterday.setDate(yesterday.getDate() - 1);
+                    if (d.toDateString() === today.toDateString()) return 'Today';
+                    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+                    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                }
+
+                // ---------- render one message ----------
+                function renderMessage(message, isOutgoing) {
+                    const row = document.createElement('div');
+                    row.className = `message-row ${isOutgoing ? 'outgoing' : 'incoming'}`;
+
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'bubble-wrapper';
+                    wrapper.setAttribute('data-timestamp', message.timestamp_ms);
+                    wrapper.setAttribute('data-time', formatTime(message.timestamp_ms));
+
+                    const bubble = document.createElement('div');
+                    bubble.className = 'bubble';
+
+                    if (message.content && message.content.trim() !== '') {
+                        const textSpan = document.createElement('span');
+                        textSpan.textContent = message.content;
+                        bubble.appendChild(textSpan);
+                    }
+
+                    if (message.photos && message.photos.length > 0) {
+                        const photoDiv = document.createElement('div');
+                        photoDiv.className = 'media-placeholder';
+                        photoDiv.innerHTML = '📷 <span style="color:#aaa;">photo</span>';
+                        bubble.appendChild(photoDiv);
+                    }
+
+                    if (message.videos && message.videos.length > 0) {
+                        const videoDiv = document.createElement('div');
+                        videoDiv.className = 'media-placeholder';
+                        videoDiv.innerHTML = '🎥 <span style="color:#aaa;">video</span>';
+                        bubble.appendChild(videoDiv);
+                    }
+
+                    if (message.share) {
+                        const link = message.share.link;
+                        if (link && (link.includes('giphy.com') || link.includes('.gif'))) {
+                            const img = document.createElement('img');
+                            img.src = link;
+                            img.alt = 'gif';
+                            img.className = 'gif-img';
+                            img.onerror = () => img.style.display = 'none';
+                            bubble.appendChild(img);
+                        } else if (link) {
+                            const a = document.createElement('a');
+                            a.href = link;
+                            a.target = '_blank';
+                            a.className = 'link-preview';
+                            a.textContent = link.length > 40 ? link.slice(0,40)+'…' : link;
+                            bubble.appendChild(a);
+                        } else if (message.share.share_text) {
+                            const shareText = document.createElement('span');
+                            shareText.textContent = message.share.share_text;
+                            bubble.appendChild(shareText);
+                        }
+                    }
+
+                    if (message.content && message.content.includes('sticker') && !isSystemMessage(message)) {
+                        const stickerDiv = document.createElement('div');
+                        stickerDiv.className = 'sticker-placeholder';
+                        stickerDiv.textContent = '🎨 sticker';
+                        bubble.appendChild(stickerDiv);
+                    }
+
+                    if (message.reactions && message.reactions.length > 0) {
+                        const reactionsDiv = document.createElement('div');
+                        reactionsDiv.className = 'reactions';
+                        message.reactions.forEach(r => {
+                            const reactSpan = document.createElement('span');
+                            reactSpan.className = 'reaction-emoji';
+                            reactSpan.textContent = r.reaction;
+                            reactionsDiv.appendChild(reactSpan);
+                        });
+                        bubble.appendChild(reactionsDiv);
+                    }
+
+                    wrapper.appendChild(bubble);
+                    row.appendChild(wrapper);
+
+                    wrapper.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        const time = this.getAttribute('data-time');
+                        popup.textContent = time;
+                        popup.classList.remove('hidden');
+
+                        const rect = this.getBoundingClientRect();
+                        const popupWidth = popup.offsetWidth;
+                        let left = rect.left + (rect.width / 2) - (popupWidth / 2);
+                        if (left < 5) left = 5;
+                        if (left + popupWidth > window.innerWidth - 5) left = window.innerWidth - popupWidth - 5;
+                        const top = rect.top - 40;
+                        popup.style.left = left + 'px';
+                        popup.style.top = (top > 10 ? top : rect.bottom + 10) + 'px';
+
+                        setTimeout(() => popup.classList.add('hidden'), 2000);
+                    });
+
+                    return row;
+                }
+
+                function renderMessages(messages) {
+                    messagesArea.innerHTML = '';
+                    if (!messages.length) return;
+
+                    const filtered = messages.filter(msg => !isSystemMessage(msg));
+                    const sorted = [...filtered].sort((a,b) => a.timestamp_ms - b.timestamp_ms);
+                    let lastDate = null;
+                    for (const msg of sorted) {
+                        const msgDate = new Date(msg.timestamp_ms).toDateString();
+                        if (msgDate !== lastDate) {
+                            lastDate = msgDate;
+                            const header = document.createElement('div');
+                            header.className = 'date-header';
+                            header.textContent = formatDateHeader(msg.timestamp_ms);
+                            messagesArea.appendChild(header);
+                        }
+                        const isOutgoing = msg.sender_name === 'J';
+                        messagesArea.appendChild(renderMessage(msg, isOutgoing));
+                    }
+                    messagesArea.scrollTop = messagesArea.scrollHeight;
+                }
+
+                function showError(message) {
+                    messagesArea.innerHTML = `
+                        <div class="error-message">
+                            <div style="font-size:40px; margin-bottom:12px;">⚠️</div>
+                            <div style="font-weight:600; margin-bottom:8px;">Failed to load messages</div>
+                            <div style="margin-bottom:12px;">${message}</div>
+                            <hr style="border-color:#444; margin:16px 0;">
+                            <div style="font-size:14px; text-align:left;">
+                                <p><strong>How to fix:</strong></p>
+                                <p>Make sure <code style="background:#1a1a1a;">message_1.json</code> is in the same folder as this HTML file.</p>
+                                <p>If you're opening directly (file://), use a local server:</p>
+                                <code style="background:#111; display:block; padding:8px; border-radius:6px; margin:8px 0;">python3 -m http.server 8000</code>
+                                <p>Then open <a href="http://localhost:8000/" target="_blank">http://localhost:8000/</a></p>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                fetch('message_1.json')
+                    .then(response => {
+                        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                        return response.json();
+                    })
+                    .then(data => {
+                        loadingIndicator.style.display = 'none';
+                        const fixedData = deepFixMojibake(data);
+                        renderMessages(fixedData.messages || []);
+                    })
+                    .catch(err => {
+                        loadingIndicator.style.display = 'none';
+                        console.error('Fetch error:', err);
+                        showError(err.message);
+                    });
+
+                messagesArea.addEventListener('scroll', () => popup.classList.add('hidden'));
+                window.addEventListener('click', () => popup.classList.add('hidden'));
             }
-            messagesArea.scrollTop = messagesArea.scrollHeight;
-        }
-
-        function showError(message) {
-            messagesArea.innerHTML = `
-                <div class="error-message">
-                    <div style="font-size:40px; margin-bottom:12px;">⚠️</div>
-                    <div style="font-weight:600; margin-bottom:8px;">Failed to load messages</div>
-                    <div style="margin-bottom:12px;">${message}</div>
-                    <hr style="border-color:#444; margin:16px 0;">
-                    <div style="font-size:14px; text-align:left;">
-                        <p><strong>How to fix:</strong></p>
-                        <p>1. Open a terminal in the folder containing <code style="background:#1a1a1a;">message_1.json</code> and this HTML file.</p>
-                        <p>2. Start a simple local server. For example, if you have Python installed, run:</p>
-                        <code style="background:#111; display:block; padding:8px; border-radius:6px; margin:8px 0;">python3 -m http.server 8000</code>
-                        <p>3. Then open <a href="http://localhost:8000/" target="_blank">http://localhost:8000/</a> in your browser.</p>
-                        <p style="margin-top:12px;">This chat uses fetch() which requires a server due to browser security policies.</p>
-                    </div>
-                </div>
-            `;
-        }
-
-        // ---------- fetch, fix, render ----------
-        fetch('message_1.json')
-            .then(response => {
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                return response.json();
-            })
-            .then(data => {
-                loadingIndicator.style.display = 'none';
-                const fixedData = deepFixMojibake(data);
-                renderMessages(fixedData.messages || []);
-            })
-            .catch(err => {
-                loadingIndicator.style.display = 'none';
-                console.error('Fetch error:', err);
-                showError(err.message);
-            });
-
-        // hide popup on scroll
-        messagesArea.addEventListener('scroll', () => popup.classList.add('hidden'));
-        window.addEventListener('click', () => popup.classList.add('hidden'));
-    })();
-</script>
+        })();
+    </script>
 </body>
 </html>
