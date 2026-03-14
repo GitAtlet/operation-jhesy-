@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <title>miro · chat</title>
     <style>
+        /* (styles unchanged – keep your original CSS) */
         * {
             margin: 0;
             padding: 0;
@@ -222,7 +223,6 @@
     </div>
 </div>
 
-<!-- timestamp popup -->
 <div id="timestamp-popup" class="timestamp-tooltip hidden"></div>
 
 <script>
@@ -265,7 +265,37 @@
         const loadingIndicator = document.getElementById('loading-indicator');
         const popup = document.getElementById('timestamp-popup');
 
-        // helper: format time from timestamp_ms
+        // ---------- Mojibake fix: convert Latin-1 interpreted string to proper UTF-8 ----------
+        function fixMojibake(str) {
+            if (typeof str !== 'string') return str;
+            // Convert each character to its byte value (as if it were Latin-1)
+            const bytes = new Uint8Array(str.length);
+            for (let i = 0; i < str.length; i++) {
+                bytes[i] = str.charCodeAt(i) & 0xFF;
+            }
+            // Decode those bytes as UTF-8
+            return new TextDecoder('utf-8').decode(bytes);
+        }
+
+        // Recursively walk object and fix all strings
+        function deepFixMojibake(obj) {
+            if (Array.isArray(obj)) {
+                for (let i = 0; i < obj.length; i++) {
+                    obj[i] = deepFixMojibake(obj[i]);
+                }
+            } else if (obj && typeof obj === 'object') {
+                for (let key in obj) {
+                    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                        obj[key] = deepFixMojibake(obj[key]);
+                    }
+                }
+            } else if (typeof obj === 'string') {
+                return fixMojibake(obj);
+            }
+            return obj;
+        }
+
+        // ---------- helpers ----------
         function formatTime(timestamp) {
             const d = new Date(timestamp);
             let hours = d.getHours();
@@ -285,6 +315,7 @@
             return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         }
 
+        // ---------- render message ----------
         function renderMessage(message, isOutgoing) {
             const row = document.createElement('div');
             row.className = `message-row ${isOutgoing ? 'outgoing' : 'incoming'}`;
@@ -300,7 +331,7 @@
             // text content
             if (message.content && message.content.trim() !== '') {
                 const textSpan = document.createElement('span');
-                textSpan.textContent = message.content;
+                textSpan.textContent = message.content; // already fixed
                 bubble.appendChild(textSpan);
             }
 
@@ -352,14 +383,14 @@
                 bubble.appendChild(stickerDiv);
             }
 
-            // reactions
+            // reactions (emojis already fixed)
             if (message.reactions && message.reactions.length > 0) {
                 const reactionsDiv = document.createElement('div');
                 reactionsDiv.className = 'reactions';
                 message.reactions.forEach(r => {
                     const reactSpan = document.createElement('span');
                     reactSpan.className = 'reaction-emoji';
-                    reactSpan.textContent = r.reaction;
+                    reactSpan.textContent = r.reaction; // fixed emoji
                     reactionsDiv.appendChild(reactSpan);
                 });
                 bubble.appendChild(reactionsDiv);
@@ -430,17 +461,17 @@
             `;
         }
 
-        // Attempt to fetch JSON
+        // ---------- fetch and fix ----------
         fetch('message_1.json')
             .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status} - file not found or inaccessible`);
-                }
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 return response.json();
             })
             .then(data => {
                 loadingIndicator.style.display = 'none';
-                renderMessages(data.messages || []);
+                // Fix all string fields in the parsed JSON
+                const fixedData = deepFixMojibake(data);
+                renderMessages(fixedData.messages || []);
             })
             .catch(err => {
                 loadingIndicator.style.display = 'none';
