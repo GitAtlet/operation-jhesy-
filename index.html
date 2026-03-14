@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <title>miro · private chat</title>
+    <!-- Leaflet for map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
+        /* (styles unchanged – same as before) */
         * {
             margin: 0;
             padding: 0;
@@ -30,6 +34,7 @@
             box-shadow: 0 0 20px rgba(255,255,255,0.05);
             border-left: 1px solid #1e1e1e;
             border-right: 1px solid #1e1e1e;
+            position: relative;
         }
         .chat-header {
             padding: 12px 16px;
@@ -77,13 +82,85 @@
             min-height: 18px;
             transition: opacity 0.2s;
         }
+        .globe-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: background 0.2s;
+            color: #aaa;
+            line-height: 1;
+        }
+        .globe-btn:hover {
+            background: #2a2a2a;
+            color: #3797f0;
+        }
+        .stats-panel {
+            background: #1a1a1a;
+            margin: 12px 16px;
+            padding: 16px;
+            border-radius: 24px;
+            border: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #ddd;
+        }
+        .stats-label {
+            font-size: 14px;
+            color: #aaa;
+        }
+        .stats-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #3797f0;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #2a2a2a;
+            border-radius: 100px;
+            overflow: hidden;
+            margin: 4px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #3797f0;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .continent-breakdown {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 12px;
+            margin-top: 8px;
+        }
+        .continent-item {
+            font-size: 13px;
+            color: #ccc;
+            background: #2a2a2a;
+            padding: 4px 12px;
+            border-radius: 100px;
+        }
+        .continent-item span {
+            color: #3797f0;
+            font-weight: 600;
+            margin-left: 4px;
+        }
         .messages-area {
             flex: 1;
             overflow-y: auto;
             padding: 16px 12px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 4px; /* smaller gap for grouped messages */
             scroll-behavior: smooth;
         }
         .date-header {
@@ -131,8 +208,11 @@
             height: 100%;
             object-fit: cover;
         }
+        .avatar-col.placeholder {
+            visibility: hidden; /* keeps space but invisible */
+        }
         .message-row.outgoing .avatar-col {
-            display: none; /* hide own avatar, but you could show if you want */
+            display: none;
         }
         .bubble-wrapper {
             max-width: 80%;
@@ -238,24 +318,11 @@
             text-align: center;
             border: 1px solid #6b2a2a;
         }
-        .error-message a {
-            color: #9bc9ff;
-            text-decoration: underline;
-        }
-        .error-message code {
-            background: #1a1a1a;
-            padding: 4px 8px;
-            border-radius: 8px;
-            display: inline-block;
-            margin: 4px 0;
-            font-family: monospace;
-        }
         .loading {
             text-align: center;
             color: #666;
             padding: 40px;
         }
-        /* password overlay */
         .overlay {
             position: fixed;
             top: 0;
@@ -327,6 +394,94 @@
         .chat-container {
             display: none; /* hidden until password is entered */
         }
+        .map-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
+            z-index: 3000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .map-modal.visible {
+            visibility: visible;
+            opacity: 1;
+        }
+        .map-container {
+            width: 95%;
+            max-width: 1200px;
+            height: 70%;
+            background: #1a1a1a;
+            border-radius: 24px;
+            overflow: hidden;
+            border: 2px solid #333;
+            position: relative;
+        }
+        #world-map {
+            width: 100%;
+            height: 100%;
+            background: #2a2a2a;
+        }
+        .map-header {
+            width: 95%;
+            max-width: 1200px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            color: white;
+        }
+        .map-header h3 {
+            font-size: 20px;
+            font-weight: 500;
+            color: #ddd;
+        }
+        .close-map-btn {
+            background: #3797f0;
+            border: none;
+            color: white;
+            font-size: 16px;
+            padding: 8px 20px;
+            border-radius: 40px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .close-map-btn:hover {
+            background: #2a7ed4;
+        }
+        .map-stats {
+            width: 95%;
+            max-width: 1200px;
+            margin-top: 12px;
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            color: #ccc;
+            font-size: 14px;
+        }
+        .map-stats span {
+            color: #3797f0;
+            font-weight: 600;
+        }
+        .leaflet-control-attribution {
+            background: rgba(0,0,0,0.5) !important;
+            color: #aaa !important;
+        }
+        .leaflet-popup-content-wrapper {
+            background: #2a2a2a;
+            color: white;
+            border-radius: 12px;
+        }
+        .leaflet-popup-tip {
+            background: #2a2a2a;
+        }
     </style>
 </head>
 <body>
@@ -341,12 +496,24 @@
         </div>
     </div>
 
-    <!-- Chat container (hidden initially) -->
+    <!-- Map modal -->
+    <div class="map-modal" id="map-modal">
+        <div class="map-header">
+            <h3>🌍 your travel wishlist</h3>
+            <button class="close-map-btn" id="close-map-btn">done</button>
+        </div>
+        <div class="map-container">
+            <div id="world-map"></div>
+        </div>
+        <div class="map-stats" id="map-stats">
+            <span id="map-selected-count">0</span> countries selected · <span id="map-percentage">0%</span> of the world
+        </div>
+    </div>
+
+    <!-- Chat container -->
     <div class="chat-container" id="chat-container">
         <div class="chat-header">
-            <div class="header-avatar" id="header-avatar">
-                <!-- filled by js -->
-            </div>
+            <div class="header-avatar" id="header-avatar"></div>
             <div class="header-info">
                 <div class="name">
                     <span>miro</span>
@@ -354,7 +521,25 @@
                 </div>
                 <div class="status" id="status-text">...</div>
             </div>
+            <button class="globe-btn" id="open-map-btn" title="travel wishlist">🌍</button>
         </div>
+
+        <!-- statistics panel -->
+        <div class="stats-panel" id="stats-panel">
+            <div class="stats-row">
+                <span class="stats-label">world coverage</span>
+                <span class="stats-value" id="world-percent">0%</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="world-progress" style="width: 0%;"></div>
+            </div>
+            <div class="stats-row">
+                <span class="stats-label">countries</span>
+                <span class="stats-value" id="country-count">0</span>
+            </div>
+            <div class="continent-breakdown" id="continent-breakdown"></div>
+        </div>
+
         <div class="messages-area" id="messages-area">
             <div class="loading" id="loading-indicator">loading messages...</div>
         </div>
@@ -375,7 +560,7 @@
                 const pwd = passwordInput.value.trim();
                 if (pwd === 'esy' || pwd === 'miro') {
                     overlay.style.display = 'none';
-                    chatContainer.style.display = 'flex'; // show chat
+                    chatContainer.style.display = 'flex';
                     initChat();
                 } else {
                     errorMsg.textContent = 'wrong password';
@@ -383,13 +568,12 @@
                     passwordInput.focus();
                 }
             }
-
             unlockBtn.addEventListener('click', checkPassword);
             passwordInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') checkPassword();
             });
 
-            // ---------- avatar handling ----------
+            // ---------- avatar helper ----------
             function createAvatar(container, name, imageFile) {
                 const img = new Image();
                 img.onload = () => {
@@ -397,7 +581,6 @@
                     container.appendChild(img);
                 };
                 img.onerror = () => {
-                    // fallback: colored circle with initial
                     container.innerHTML = '';
                     container.style.background = name === 'miro' ? '#3b5c7a' : '#7a4b6e';
                     container.style.display = 'flex';
@@ -412,13 +595,133 @@
                 img.style.objectFit = 'cover';
             }
 
-            // ---------- chat logic ----------
+            // ---------- travel wishlist ----------
+            const STORAGE_KEY = 'travelWishlist';
+            let selectedCountries = new Set();
+            let countriesData = [];
+            const continentMap = {
+                'AF': 'Africa', 'AS': 'Asia', 'EU': 'Europe', 'NA': 'North America',
+                'SA': 'South America', 'OC': 'Oceania', 'AN': 'Antarctica'
+            };
+
+            function loadSelections() {
+                try {
+                    const saved = localStorage.getItem(STORAGE_KEY);
+                    if (saved) selectedCountries = new Set(JSON.parse(saved));
+                } catch (e) {}
+                updateAllStats();
+            }
+            function saveSelections() {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify([...selectedCountries]));
+                updateAllStats();
+            }
+            function updateAllStats() {
+                const total = countriesData.length || 195;
+                const selectedCount = selectedCountries.size;
+                const percent = total ? Math.round((selectedCount / total) * 100) : 0;
+
+                document.getElementById('world-percent').textContent = percent + '%';
+                document.getElementById('world-progress').style.width = percent + '%';
+                document.getElementById('country-count').textContent = selectedCount;
+                document.getElementById('map-selected-count').textContent = selectedCount;
+                document.getElementById('map-percentage').textContent = percent + '%';
+
+                if (countriesData.length) {
+                    const continentCount = {};
+                    countriesData.forEach(c => {
+                        if (selectedCountries.has(c.code)) {
+                            const cont = c.continent || 'Other';
+                            continentCount[cont] = (continentCount[cont] || 0) + 1;
+                        }
+                    });
+                    const breakdownDiv = document.getElementById('continent-breakdown');
+                    breakdownDiv.innerHTML = '';
+                    for (let [cont, cnt] of Object.entries(continentCount)) {
+                        const item = document.createElement('div');
+                        item.className = 'continent-item';
+                        item.innerHTML = `${cont} <span>${cnt}</span>`;
+                        breakdownDiv.appendChild(item);
+                    }
+                }
+            }
+
+            // ---------- map ----------
+            let map = null;
+            let mapInitialized = false;
+
+            function initMap() {
+                if (mapInitialized) return;
+                mapInitialized = true;
+
+                map = L.map('world-map').setView([20, 0], 2);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(map);
+
+                fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson')
+                    .then(res => res.json())
+                    .then(data => {
+                        countriesData = data.features.map(f => ({
+                            code: f.properties.ISO_A3,
+                            name: f.properties.ADMIN,
+                            continent: continentMap[f.properties.CONTINENT] || 'Other'
+                        })).filter(c => c.code);
+
+                        L.geoJSON(data, {
+                            style: feature => {
+                                const code = feature.properties.ISO_A3;
+                                return {
+                                    fillColor: selectedCountries.has(code) ? '#f0a55a' : '#2a5c8a',
+                                    color: '#555',
+                                    weight: 1,
+                                    fillOpacity: 0.7
+                                };
+                            },
+                            onEachFeature: (feature, layer) => {
+                                const code = feature.properties.ISO_A3;
+                                const name = feature.properties.ADMIN;
+                                if (!code) return;
+
+                                layer.on('click', () => {
+                                    if (selectedCountries.has(code)) {
+                                        selectedCountries.delete(code);
+                                        layer.setStyle({ fillColor: '#2a5c8a' });
+                                    } else {
+                                        selectedCountries.add(code);
+                                        layer.setStyle({ fillColor: '#f0a55a' });
+                                    }
+                                    saveSelections();
+                                });
+
+                                layer.bindTooltip(name, { permanent: false, direction: 'auto' });
+                            }
+                        }).addTo(map);
+
+                        updateAllStats();
+                    })
+                    .catch(err => console.error('failed to load countries', err));
+            }
+
+            function openMapModal() {
+                document.getElementById('map-modal').classList.add('visible');
+                loadSelections();
+                initMap();
+                setTimeout(() => map.invalidateSize(), 100);
+            }
+            function closeMapModal() {
+                document.getElementById('map-modal').classList.remove('visible');
+            }
+            document.getElementById('open-map-btn').addEventListener('click', openMapModal);
+            document.getElementById('close-map-btn').addEventListener('click', closeMapModal);
+            document.getElementById('map-modal').addEventListener('click', (e) => {
+                if (e.target === document.getElementById('map-modal')) closeMapModal();
+            });
+
+            // ---------- chat logic with message grouping ----------
             function initChat() {
-                // set header avatar (miro)
                 const headerAvatar = document.getElementById('header-avatar');
                 createAvatar(headerAvatar, 'miro', 'miro.jpg');
 
-                // dynamic status
                 const statusLines = [
                     "thinking about you", "smiling at the screen", "listening to music",
                     "reading your messages", "eating something good", "staring at the ceiling",
@@ -443,7 +746,6 @@
                 const loadingIndicator = document.getElementById('loading-indicator');
                 const popup = document.getElementById('timestamp-popup');
 
-                // mojibake fix
                 function fixMojibake(str) {
                     if (typeof str !== 'string') return str;
                     const bytes = new Uint8Array(str.length);
@@ -463,7 +765,6 @@
                     return obj;
                 }
 
-                // system message filter
                 function isSystemMessage(msg) {
                     if (msg.call_duration !== undefined) return true;
                     if (msg.content) {
@@ -480,7 +781,6 @@
                     return false;
                 }
 
-                // time helpers
                 function formatTime(timestamp) {
                     const d = new Date(timestamp);
                     let hours = d.getHours();
@@ -499,37 +799,41 @@
                     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                 }
 
-                // render one message with avatar
-                function renderMessage(message, isOutgoing) {
+                // render one message; showAvatar controls whether avatar appears for incoming
+                function renderMessage(message, isOutgoing, showAvatar) {
                     const row = document.createElement('div');
                     row.className = `message-row ${isOutgoing ? 'outgoing' : 'incoming'}`;
 
-                    // avatar column for incoming messages
                     if (!isOutgoing) {
-                        const avatarCol = document.createElement('div');
-                        avatarCol.className = 'avatar-col';
-                        // we'll set the avatar later via createAvatar
-                        // but need a unique id or reference; simpler: create img element now
-                        const img = new Image();
-                        img.onload = () => {
-                            avatarCol.innerHTML = '';
+                        if (showAvatar) {
+                            const avatarCol = document.createElement('div');
+                            avatarCol.className = 'avatar-col';
+                            const img = new Image();
+                            img.onload = () => {
+                                avatarCol.innerHTML = '';
+                                avatarCol.appendChild(img);
+                            };
+                            img.onerror = () => {
+                                avatarCol.innerHTML = '';
+                                avatarCol.style.background = '#3b5c7a';
+                                avatarCol.style.display = 'flex';
+                                avatarCol.style.alignItems = 'center';
+                                avatarCol.style.justifyContent = 'center';
+                                avatarCol.textContent = 'M';
+                            };
+                            img.src = 'miro.jpg';
+                            img.alt = 'miro';
+                            img.style.width = '100%';
+                            img.style.height = '100%';
+                            img.style.objectFit = 'cover';
                             avatarCol.appendChild(img);
-                        };
-                        img.onerror = () => {
-                            avatarCol.innerHTML = '';
-                            avatarCol.style.background = '#3b5c7a';
-                            avatarCol.style.display = 'flex';
-                            avatarCol.style.alignItems = 'center';
-                            avatarCol.style.justifyContent = 'center';
-                            avatarCol.textContent = 'M';
-                        };
-                        img.src = 'miro.jpg';
-                        img.alt = 'miro';
-                        img.style.width = '100%';
-                        img.style.height = '100%';
-                        img.style.objectFit = 'cover';
-                        avatarCol.appendChild(img); // will be replaced if load succeeds, but onload will clear
-                        row.appendChild(avatarCol);
+                            row.appendChild(avatarCol);
+                        } else {
+                            // invisible placeholder to keep alignment
+                            const placeholder = document.createElement('div');
+                            placeholder.className = 'avatar-col placeholder';
+                            row.appendChild(placeholder);
+                        }
                     }
 
                     const wrapper = document.createElement('div');
@@ -552,14 +856,12 @@
                         photoDiv.innerHTML = '📷 <span style="color:#aaa;">photo</span>';
                         bubble.appendChild(photoDiv);
                     }
-
                     if (message.videos && message.videos.length > 0) {
                         const videoDiv = document.createElement('div');
                         videoDiv.className = 'media-placeholder';
                         videoDiv.innerHTML = '🎥 <span style="color:#aaa;">video</span>';
                         bubble.appendChild(videoDiv);
                     }
-
                     if (message.share) {
                         const link = message.share.link;
                         if (link && (link.includes('giphy.com') || link.includes('.gif'))) {
@@ -582,14 +884,12 @@
                             bubble.appendChild(shareText);
                         }
                     }
-
                     if (message.content && message.content.includes('sticker') && !isSystemMessage(message)) {
                         const stickerDiv = document.createElement('div');
                         stickerDiv.className = 'sticker-placeholder';
                         stickerDiv.textContent = '🎨 sticker';
                         bubble.appendChild(stickerDiv);
                     }
-
                     if (message.reactions && message.reactions.length > 0) {
                         const reactionsDiv = document.createElement('div');
                         reactionsDiv.className = 'reactions';
@@ -632,7 +932,12 @@
 
                     const filtered = messages.filter(msg => !isSystemMessage(msg));
                     const sorted = [...filtered].sort((a,b) => a.timestamp_ms - b.timestamp_ms);
+
                     let lastDate = null;
+                    let lastSender = null;
+                    let lastTimestamp = 0;
+                    const GROUP_INTERVAL = 120000; // 2 minutes
+
                     for (const msg of sorted) {
                         const msgDate = new Date(msg.timestamp_ms).toDateString();
                         if (msgDate !== lastDate) {
@@ -641,9 +946,24 @@
                             header.className = 'date-header';
                             header.textContent = formatDateHeader(msg.timestamp_ms);
                             messagesArea.appendChild(header);
+                            // reset grouping on new date
+                            lastSender = null;
+                            lastTimestamp = 0;
                         }
-                        const isOutgoing = msg.sender_name === 'J'; // J = esy
-                        messagesArea.appendChild(renderMessage(msg, isOutgoing));
+
+                        const isOutgoing = msg.sender_name === 'J';
+                        // determine if this message starts a new group (different sender or time gap > 2 min)
+                        const isNewGroup = (lastSender !== msg.sender_name) || (msg.timestamp_ms - lastTimestamp > GROUP_INTERVAL);
+
+                        // For incoming, show avatar only if new group; outgoing never shows avatar
+                        const showAvatar = !isOutgoing && isNewGroup;
+
+                        const row = renderMessage(msg, isOutgoing, showAvatar);
+                        messagesArea.appendChild(row);
+
+                        // update group tracking
+                        lastSender = msg.sender_name;
+                        lastTimestamp = msg.timestamp_ms;
                     }
                     messagesArea.scrollTop = messagesArea.scrollHeight;
                 }
@@ -655,13 +975,7 @@
                             <div style="font-weight:600; margin-bottom:8px;">Failed to load messages</div>
                             <div style="margin-bottom:12px;">${message}</div>
                             <hr style="border-color:#444; margin:16px 0;">
-                            <div style="font-size:14px; text-align:left;">
-                                <p><strong>How to fix:</strong></p>
-                                <p>Make sure <code style="background:#1a1a1a;">message_1.json</code> is in the same folder as this HTML file.</p>
-                                <p>If you're opening directly (file://), use a local server:</p>
-                                <code style="background:#111; display:block; padding:8px; border-radius:6px; margin:8px 0;">python3 -m http.server 8000</code>
-                                <p>Then open <a href="http://localhost:8000/" target="_blank">http://localhost:8000/</a></p>
-                            </div>
+                            <p>Make sure <code>message_1.json</code> is in the same folder.</p>
                         </div>
                     `;
                 }
@@ -685,6 +999,8 @@
                 messagesArea.addEventListener('scroll', () => popup.classList.add('hidden'));
                 window.addEventListener('click', () => popup.classList.add('hidden'));
             }
+
+            loadSelections();
         })();
     </script>
 </body>
