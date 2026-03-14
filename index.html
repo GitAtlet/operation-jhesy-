@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <title>miro · chat</title>
     <style>
-        /* (styles unchanged – keep your original CSS) */
+        /* (styles unchanged – same as before) */
         * {
             margin: 0;
             padding: 0;
@@ -227,28 +227,15 @@
 
 <script>
     (function() {
-        // ---------- dynamic status sentences ----------
+        // ---------- dynamic status ----------
         const statusLines = [
-            "thinking about you",
-            "smiling at the screen",
-            "listening to music",
-            "reading your messages",
-            "eating something good",
-            "staring at the ceiling",
-            "sending good vibes",
-            "typing... maybe",
-            "laughing at a meme",
-            "remembering something",
-            "feeling grateful",
-            "drinking coffee",
-            "taking a deep breath",
-            "watching the clouds",
-            "humming a tune",
-            "thinking of a reply",
-            "smiling quietly",
-            "being silly",
-            "enjoying this chat",
-            "quietly content"
+            "thinking about you", "smiling at the screen", "listening to music",
+            "reading your messages", "eating something good", "staring at the ceiling",
+            "sending good vibes", "typing... maybe", "laughing at a meme",
+            "remembering something", "feeling grateful", "drinking coffee",
+            "taking a deep breath", "watching the clouds", "humming a tune",
+            "thinking of a reply", "smiling quietly", "being silly",
+            "enjoying this chat", "quietly content"
         ];
         let statusIndex = 0;
         const statusEl = document.getElementById('status-text');
@@ -265,29 +252,19 @@
         const loadingIndicator = document.getElementById('loading-indicator');
         const popup = document.getElementById('timestamp-popup');
 
-        // ---------- Mojibake fix: convert Latin-1 interpreted string to proper UTF-8 ----------
+        // ---------- Mojibake fix ----------
         function fixMojibake(str) {
             if (typeof str !== 'string') return str;
-            // Convert each character to its byte value (as if it were Latin-1)
             const bytes = new Uint8Array(str.length);
-            for (let i = 0; i < str.length; i++) {
-                bytes[i] = str.charCodeAt(i) & 0xFF;
-            }
-            // Decode those bytes as UTF-8
+            for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xFF;
             return new TextDecoder('utf-8').decode(bytes);
         }
-
-        // Recursively walk object and fix all strings
         function deepFixMojibake(obj) {
             if (Array.isArray(obj)) {
-                for (let i = 0; i < obj.length; i++) {
-                    obj[i] = deepFixMojibake(obj[i]);
-                }
+                for (let i = 0; i < obj.length; i++) obj[i] = deepFixMojibake(obj[i]);
             } else if (obj && typeof obj === 'object') {
                 for (let key in obj) {
-                    if (Object.prototype.hasOwnProperty.call(obj, key)) {
-                        obj[key] = deepFixMojibake(obj[key]);
-                    }
+                    if (Object.prototype.hasOwnProperty.call(obj, key)) obj[key] = deepFixMojibake(obj[key]);
                 }
             } else if (typeof obj === 'string') {
                 return fixMojibake(obj);
@@ -295,7 +272,29 @@
             return obj;
         }
 
-        // ---------- helpers ----------
+        // ---------- Helper to detect system/action messages ----------
+        function isSystemMessage(msg) {
+            // call logs
+            if (msg.call_duration !== undefined) return true;
+
+            // video/audio chat start/end
+            if (msg.content) {
+                const c = msg.content;
+                if (c.startsWith('Reacted ') ||
+                    c.startsWith('You sent a sticker.') ||
+                    c.startsWith('You started a video chat') ||
+                    c.startsWith('Video chat ended') ||
+                    c.includes('changed the chat theme') ||
+                    c.includes('started a video chat')) {
+                    return true;
+                }
+                // Some messages are just empty objects with no content but maybe other fields?
+                // We'll keep them if they have photos/videos/share.
+            }
+            return false;
+        }
+
+        // ---------- time helpers ----------
         function formatTime(timestamp) {
             const d = new Date(timestamp);
             let hours = d.getHours();
@@ -304,7 +303,6 @@
             hours = hours % 12 || 12;
             return `${hours}:${minutes} ${ampm}`;
         }
-
         function formatDateHeader(timestamp) {
             const d = new Date(timestamp);
             const today = new Date();
@@ -315,7 +313,7 @@
             return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         }
 
-        // ---------- render message ----------
+        // ---------- render one message ----------
         function renderMessage(message, isOutgoing) {
             const row = document.createElement('div');
             row.className = `message-row ${isOutgoing ? 'outgoing' : 'incoming'}`;
@@ -328,10 +326,10 @@
             const bubble = document.createElement('div');
             bubble.className = 'bubble';
 
-            // text content
+            // text content (if any)
             if (message.content && message.content.trim() !== '') {
                 const textSpan = document.createElement('span');
-                textSpan.textContent = message.content; // already fixed
+                textSpan.textContent = message.content;
                 bubble.appendChild(textSpan);
             }
 
@@ -351,7 +349,7 @@
                 bubble.appendChild(videoDiv);
             }
 
-            // share (link / gif)
+            // share (links / GIFs)
             if (message.share) {
                 const link = message.share.link;
                 if (link && (link.includes('giphy.com') || link.includes('.gif'))) {
@@ -375,22 +373,22 @@
                 }
             }
 
-            // stickers
-            if (message.content && message.content.includes('sticker')) {
+            // stickers (if content mentions sticker, but we already filtered system ones)
+            if (message.content && message.content.includes('sticker') && !isSystemMessage(message)) {
                 const stickerDiv = document.createElement('div');
                 stickerDiv.className = 'sticker-placeholder';
                 stickerDiv.textContent = '🎨 sticker';
                 bubble.appendChild(stickerDiv);
             }
 
-            // reactions (emojis already fixed)
+            // reactions (actual emoji reactions on this message)
             if (message.reactions && message.reactions.length > 0) {
                 const reactionsDiv = document.createElement('div');
                 reactionsDiv.className = 'reactions';
                 message.reactions.forEach(r => {
                     const reactSpan = document.createElement('span');
                     reactSpan.className = 'reaction-emoji';
-                    reactSpan.textContent = r.reaction; // fixed emoji
+                    reactSpan.textContent = r.reaction;
                     reactionsDiv.appendChild(reactSpan);
                 });
                 bubble.appendChild(reactionsDiv);
@@ -421,11 +419,16 @@
             return row;
         }
 
+        // ---------- render all messages (filtered) ----------
         function renderMessages(messages) {
             messagesArea.innerHTML = '';
             if (!messages.length) return;
 
-            const sorted = [...messages].sort((a,b) => a.timestamp_ms - b.timestamp_ms);
+            // Filter out system messages
+            const filtered = messages.filter(msg => !isSystemMessage(msg));
+
+            // Sort oldest first
+            const sorted = [...filtered].sort((a,b) => a.timestamp_ms - b.timestamp_ms);
             let lastDate = null;
             for (const msg of sorted) {
                 const msgDate = new Date(msg.timestamp_ms).toDateString();
@@ -461,7 +464,7 @@
             `;
         }
 
-        // ---------- fetch and fix ----------
+        // ---------- fetch, fix, render ----------
         fetch('message_1.json')
             .then(response => {
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -469,7 +472,6 @@
             })
             .then(data => {
                 loadingIndicator.style.display = 'none';
-                // Fix all string fields in the parsed JSON
                 const fixedData = deepFixMojibake(data);
                 renderMessages(fixedData.messages || []);
             })
