@@ -33,6 +33,7 @@
             box-shadow: 0 0 20px rgba(255,255,255,0.05);
             border-left: 1px solid #1e1e1e;
             border-right: 1px solid #1e1e1e;
+            position: relative;
         }
         .chat-header {
             padding: 12px 16px;
@@ -80,7 +81,6 @@
             min-height: 18px;
             transition: opacity 0.2s;
         }
-        /* globe button */
         .globe-btn {
             background: none;
             border: none;
@@ -95,6 +95,64 @@
         .globe-btn:hover {
             background: #2a2a2a;
             color: #3797f0;
+        }
+        /* statistics panel */
+        .stats-panel {
+            background: #1a1a1a;
+            margin: 12px 16px;
+            padding: 16px;
+            border-radius: 24px;
+            border: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #ddd;
+        }
+        .stats-label {
+            font-size: 14px;
+            color: #aaa;
+        }
+        .stats-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #3797f0;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #2a2a2a;
+            border-radius: 100px;
+            overflow: hidden;
+            margin: 4px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #3797f0;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .continent-breakdown {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 12px;
+            margin-top: 8px;
+        }
+        .continent-item {
+            font-size: 13px;
+            color: #ccc;
+            background: #2a2a2a;
+            padding: 4px 12px;
+            border-radius: 100px;
+        }
+        .continent-item span {
+            color: #3797f0;
+            font-weight: 600;
+            margin-left: 4px;
         }
         .messages-area {
             flex: 1;
@@ -358,7 +416,7 @@
         .map-container {
             width: 95%;
             max-width: 1200px;
-            height: 80%;
+            height: 70%;
             background: #1a1a1a;
             border-radius: 24px;
             overflow: hidden;
@@ -397,12 +455,19 @@
         .close-map-btn:hover {
             background: #2a7ed4;
         }
-        .selected-countries-info {
-            color: #aaa;
-            margin-top: 8px;
+        .map-stats {
+            width: 95%;
+            max-width: 1200px;
+            margin-top: 12px;
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            color: #ccc;
             font-size: 14px;
-            max-width: 95%;
-            text-align: center;
+        }
+        .map-stats span {
+            color: #3797f0;
+            font-weight: 600;
         }
         /* leaflet overrides */
         .leaflet-control-attribution {
@@ -431,7 +496,7 @@
         </div>
     </div>
 
-    <!-- Map modal (initially hidden) -->
+    <!-- Map modal -->
     <div class="map-modal" id="map-modal">
         <div class="map-header">
             <h3>🌍 your travel wishlist</h3>
@@ -440,7 +505,9 @@
         <div class="map-container">
             <div id="world-map"></div>
         </div>
-        <div class="selected-countries-info" id="selected-countries-info"></div>
+        <div class="map-stats" id="map-stats">
+            <span id="map-selected-count">0</span> countries selected · <span id="map-percentage">0%</span> of the world
+        </div>
     </div>
 
     <!-- Chat container -->
@@ -456,6 +523,23 @@
             </div>
             <button class="globe-btn" id="open-map-btn" title="travel wishlist">🌍</button>
         </div>
+
+        <!-- statistics panel (always visible) -->
+        <div class="stats-panel" id="stats-panel">
+            <div class="stats-row">
+                <span class="stats-label">world coverage</span>
+                <span class="stats-value" id="world-percent">0%</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="world-progress" style="width: 0%;"></div>
+            </div>
+            <div class="stats-row">
+                <span class="stats-label">countries</span>
+                <span class="stats-value" id="country-count">0</span>
+            </div>
+            <div class="continent-breakdown" id="continent-breakdown"></div>
+        </div>
+
         <div class="messages-area" id="messages-area">
             <div class="loading" id="loading-indicator">loading messages...</div>
         </div>
@@ -511,13 +595,18 @@
                 img.style.objectFit = 'cover';
             }
 
-            // ---------- map wishlist ----------
-            let map = null;
-            let geoJsonLayer = null;
-            let selectedCountries = new Set(); // store country codes (or names)
+            // ---------- travel wishlist with localStorage ----------
             const STORAGE_KEY = 'travelWishlist';
+            let selectedCountries = new Set(); // store country codes (ISO3)
+            let countriesData = []; // will hold { code, name, continent }
 
-            // load saved selections
+            // Continent mapping (simplified)
+            const continentMap = {
+                'AF': 'Africa', 'AS': 'Asia', 'EU': 'Europe', 'NA': 'North America',
+                'SA': 'South America', 'OC': 'Oceania', 'AN': 'Antarctica'
+            };
+
+            // Load from localStorage
             function loadSelections() {
                 try {
                     const saved = localStorage.getItem(STORAGE_KEY);
@@ -525,101 +614,139 @@
                         selectedCountries = new Set(JSON.parse(saved));
                     }
                 } catch (e) {}
+                updateAllStats();
             }
+
+            // Save to localStorage
             function saveSelections() {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify([...selectedCountries]));
-                updateSelectedInfo();
+                updateAllStats();
             }
-            function updateSelectedInfo() {
-                const info = document.getElementById('selected-countries-info');
-                if (selectedCountries.size === 0) {
-                    info.textContent = 'click on countries to add them to your wishlist ✨';
-                } else {
-                    info.textContent = `✅ ${selectedCountries.size} country${selectedCountries.size > 1 ? 's' : ''} selected`;
+
+            // Update all UI stats (panel + map modal)
+            function updateAllStats() {
+                const total = countriesData.length || 195; // fallback
+                const selectedCount = selectedCountries.size;
+                const percent = total ? Math.round((selectedCount / total) * 100) : 0;
+
+                // panel
+                document.getElementById('world-percent').textContent = percent + '%';
+                document.getElementById('world-progress').style.width = percent + '%';
+                document.getElementById('country-count').textContent = selectedCount;
+
+                // map modal stats
+                document.getElementById('map-selected-count').textContent = selectedCount;
+                document.getElementById('map-percentage').textContent = percent + '%';
+
+                // continent breakdown
+                if (countriesData.length) {
+                    const continentCount = {};
+                    countriesData.forEach(c => {
+                        if (selectedCountries.has(c.code)) {
+                            const cont = c.continent || 'Other';
+                            continentCount[cont] = (continentCount[cont] || 0) + 1;
+                        }
+                    });
+                    const breakdownDiv = document.getElementById('continent-breakdown');
+                    breakdownDiv.innerHTML = '';
+                    for (let [cont, cnt] of Object.entries(continentCount)) {
+                        const item = document.createElement('div');
+                        item.className = 'continent-item';
+                        item.innerHTML = `${cont} <span>${cnt}</span>`;
+                        breakdownDiv.appendChild(item);
+                    }
                 }
             }
 
-            // initialize map
+            // ---------- map ----------
+            let map = null;
+            let geoJsonLayer = null;
+            let mapInitialized = false;
+
             function initMap() {
-                if (map) return; // already initialized
+                if (mapInitialized) return;
+                mapInitialized = true;
 
                 map = L.map('world-map').setView([20, 0], 2);
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 }).addTo(map);
 
-                // load countries GeoJSON
+                // Load country boundaries (using a reliable GeoJSON from GitHub)
                 fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson')
                     .then(res => res.json())
                     .then(data => {
+                        // Build countriesData array
+                        countriesData = data.features.map(f => ({
+                            code: f.properties.ISO_A3,
+                            name: f.properties.ADMIN,
+                            continent: continentMap[f.properties.CONTINENT] || 'Other'
+                        })).filter(c => c.code); // remove any without code
+
                         geoJsonLayer = L.geoJSON(data, {
                             style: feature => {
-                                // default style
+                                const code = feature.properties.ISO_A3;
                                 return {
-                                    fillColor: '#2a5c8a',
+                                    fillColor: selectedCountries.has(code) ? '#f0a55a' : '#2a5c8a',
                                     color: '#555',
                                     weight: 1,
-                                    fillOpacity: 0.5
+                                    fillOpacity: 0.7
                                 };
                             },
                             onEachFeature: (feature, layer) => {
-                                const countryName = feature.properties.ADMIN || feature.properties.name;
-                                const countryCode = feature.properties.ISO_A3 || feature.properties.adm0_a3; // try common codes
-                                if (!countryCode) return;
-
-                                // check if already selected
-                                if (selectedCountries.has(countryCode)) {
-                                    layer.setStyle({ fillColor: '#f0a55a', fillOpacity: 0.8 });
-                                }
+                                const code = feature.properties.ISO_A3;
+                                const name = feature.properties.ADMIN;
+                                if (!code) return;
 
                                 layer.on('click', () => {
-                                    if (selectedCountries.has(countryCode)) {
-                                        selectedCountries.delete(countryCode);
-                                        layer.setStyle({ fillColor: '#2a5c8a', fillOpacity: 0.5 });
+                                    if (selectedCountries.has(code)) {
+                                        selectedCountries.delete(code);
+                                        layer.setStyle({ fillColor: '#2a5c8a' });
                                     } else {
-                                        selectedCountries.add(countryCode);
-                                        layer.setStyle({ fillColor: '#f0a55a', fillOpacity: 0.8 });
+                                        selectedCountries.add(code);
+                                        layer.setStyle({ fillColor: '#f0a55a' });
                                     }
                                     saveSelections();
                                 });
 
-                                layer.bindTooltip(countryName, { permanent: false, direction: 'auto' });
+                                layer.bindTooltip(name, { permanent: false, direction: 'auto' });
                             }
                         }).addTo(map);
+
+                        updateAllStats();
                     })
-                    .catch(err => console.error('failed to load countries', err));
+                    .catch(err => {
+                        console.error('failed to load countries', err);
+                        alert('Could not load country data. Please check your internet connection.');
+                    });
             }
 
-            // open modal
+            // Open modal
             function openMapModal() {
                 const modal = document.getElementById('map-modal');
                 modal.classList.add('visible');
-                loadSelections(); // reload from storage (in case changed elsewhere)
-                initMap(); // ensures map exists
-                updateSelectedInfo();
-                // small delay to let map render correctly
+                loadSelections(); // ensure latest
+                initMap(); // will only run once
                 setTimeout(() => map.invalidateSize(), 100);
             }
 
-            // close modal
             function closeMapModal() {
                 document.getElementById('map-modal').classList.remove('visible');
             }
 
             document.getElementById('open-map-btn').addEventListener('click', openMapModal);
             document.getElementById('close-map-btn').addEventListener('click', closeMapModal);
-            // close on backdrop click (optional)
             document.getElementById('map-modal').addEventListener('click', (e) => {
                 if (e.target === document.getElementById('map-modal')) closeMapModal();
             });
 
             // ---------- chat logic ----------
             function initChat() {
-                // set header avatar (miro)
+                // header avatar
                 const headerAvatar = document.getElementById('header-avatar');
                 createAvatar(headerAvatar, 'miro', 'miro.jpg');
 
-                // dynamic status
+                // status rotation
                 const statusLines = [
                     "thinking about you", "smiling at the screen", "listening to music",
                     "reading your messages", "eating something good", "staring at the ceiling",
@@ -664,7 +791,6 @@
                     return obj;
                 }
 
-                // system message filter
                 function isSystemMessage(msg) {
                     if (msg.call_duration !== undefined) return true;
                     if (msg.content) {
@@ -681,7 +807,6 @@
                     return false;
                 }
 
-                // time helpers
                 function formatTime(timestamp) {
                     const d = new Date(timestamp);
                     let hours = d.getHours();
@@ -700,7 +825,6 @@
                     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                 }
 
-                // render one message with avatar
                 function renderMessage(message, isOutgoing) {
                     const row = document.createElement('div');
                     row.className = `message-row ${isOutgoing ? 'outgoing' : 'incoming'}`;
@@ -878,7 +1002,7 @@
                 window.addEventListener('click', () => popup.classList.add('hidden'));
             }
 
-            // load wishlist selections on start
+            // initial load of wishlist (even before chat starts)
             loadSelections();
         })();
     </script>
